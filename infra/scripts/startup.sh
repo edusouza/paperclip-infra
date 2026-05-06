@@ -76,6 +76,16 @@ EOF
 chmod 600 /home/paperclip/paperclip.env
 chown paperclip:paperclip /home/paperclip/paperclip.env
 
+# ── Ferramentas globais de AI ─────────────────────────────────────────────────
+
+npm install --global \
+  @openai/codex@latest \
+  @anthropic-ai/claude-code@latest \
+  opencode-ai
+
+echo "Codex:       $(codex --version 2>/dev/null || echo 'instalado')"
+echo "Claude Code: $(claude --version 2>/dev/null || echo 'instalado')"
+
 # ── Systemd: paperclip.service ────────────────────────────────────────────────
 # NOTA: o onboarding NÃO é feito aqui porque requer input interativo no modo
 # authenticated/public. Deve ser feito manualmente após o boot da VM.

@@ -1,0 +1,4 @@
+infra/terraform.tfvars
+infra/*.tfstate*
+infra/.terraform/
+infra/credentials/*.json

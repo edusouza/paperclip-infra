@@ -1,0 +1,27 @@
+# Copie este arquivo para terraform.tfvars e preencha os valores
+# cp terraform.tfvars.example terraform.tfvars
+
+# ── GCP ──────────────────────────────────────────────────────────────────────
+gcp_project_id  = "YOUR_GCP_PROJECT_ID"
+# gcp_region      = "us-central1"
+# gcp_zone        = "us-central1-a"
+# gcp_machine_type = "e2-standard-2"
+# gcp_disk_size_gb = 50
+
+# ── Domínio ───────────────────────────────────────────────────────────────────
+app_domain    = "paperclip.example.com"
+app_subdomain = "paperclip"
+
+# ── SSH ──────────────────────────────────────────────────────────────────────
+# Cole o conteúdo do seu arquivo ~/.ssh/id_ed25519.pub (ou id_rsa.pub)
+ssh_public_key = "ssh-ed25519 AAAA... your-email@example.com"
+
+# ── CloudFlare ───────────────────────────────────────────────────────────────
+# 1. Acesse https://dash.cloudflare.com/ → selecione a conta
+# 2. Zone ID: vá no seu domínio → Overview → barra lateral direita
+# 3. Account ID: aparece na URL do dashboard (dash.cloudflare.com/<ACCOUNT_ID>)
+# 4. API Token: veja instruções em credentials/README.md
+
+cloudflare_api_token  = "YOUR_CLOUDFLARE_API_TOKEN"
+cloudflare_zone_id    = "YOUR_CLOUDFLARE_ZONE_ID"
+cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"

@@ -1,15 +1,15 @@
-# Paperclip — Infraestrutura GCP + CloudFlare
+# Paperclip — GCP + CloudFlare Infrastructure
 
-Deploy do [Paperclip](https://paperclip.ing) numa VM GCE com Cloudflare Tunnel, provisionado via OpenTofu.
+Deploy of [Paperclip](https://paperclip.ing) on a GCE VM with Cloudflare Tunnel, provisioned via OpenTofu.
 
-## Arquitetura
+## Architecture
 
 ```
                         ┌─────────────────────────────────────┐
                         │         GCE VM (us-central1-a)       │
                         │         e2-standard-2 / Ubuntu 22.04 │
                         │                                       │
- Usuário                │  ┌────────────┐   ┌───────────────┐  │
+ User                   │  ┌────────────┐   ┌───────────────┐  │
     │                   │  │ cloudflared│→→→│  paperclip    │  │
     │ HTTPS             │  │  (tunnel)  │   │  :3100        │  │
     ▼                   │  └────────────┘   └───────┬───────┘  │
@@ -21,98 +21,99 @@ Deploy do [Paperclip](https://paperclip.ing) numa VM GCE com Cloudflare Tunnel, 
                         └─────────────────────────────────────┘
 ```
 
-**Por que Cloudflare Tunnel?**
-- Nenhuma porta 80/443 aberta na VM — o tunnel conecta de dentro para fora
-- TLS gerenciado automaticamente pelo CloudFlare (sem Certbot/Let's Encrypt)
-- DDoS protection e CDN inclusos
-- O IP real da VM fica oculto
+**Why Cloudflare Tunnel?**
+- No ports 80/443 open on the VM — the tunnel connects outbound
+- TLS automatically managed by CloudFlare (no Certbot/Let's Encrypt needed)
+- DDoS protection and CDN included
+- The VM's real IP stays hidden
 
 ---
 
-## Pré-requisitos
+## Prerequisites
 
-| Ferramenta | Versão | Instalação |
+| Tool | Version | Installation |
 |---|---|---|
 | OpenTofu | >= 1.6 | `winget install OpenTofu.OpenTofu` |
-| gcloud CLI | qualquer | [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install) |
+| gcloud CLI | any | [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install) |
 | SSH key pair | — | `ssh-keygen -t ed25519` |
 
-### APIs do GCP necessárias
+### Required GCP APIs
 
-Antes do primeiro `tofu apply`, ative as APIs abaixo no projeto `YOUR_GCP_PROJECT_ID`:
+Before the first `tofu apply`, enable the APIs below on your `YOUR_GCP_PROJECT_ID` project:
 
 ```bash
 gcloud services enable compute.googleapis.com --project YOUR_GCP_PROJECT_ID
 gcloud services enable iam.googleapis.com --project YOUR_GCP_PROJECT_ID
 ```
 
-Ou pelo console: [console.cloud.google.com/apis/library](https://console.cloud.google.com/apis/library) → pesquise "Compute Engine API" e ative.
+Or via the console: [console.cloud.google.com/apis/library](https://console.cloud.google.com/apis/library) → search "Compute Engine API" and enable.
 
 ---
 
-## Estrutura
+## Structure
 
 ```
 paperclip/
-├── README.md                   ← você está aqui
+├── README.md                   ← you are here
+├── README.pt.md                ← Portuguese version
 └── infra/
     ├── main.tf                 # providers: google, cloudflare, random
-    ├── variables.tf            # declaração de todas as variáveis
-    ├── gce.tf                  # VM, IP estático, regras de firewall
-    ├── cloudflare.tf           # Tunnel, roteamento, DNS CNAME
-    ├── outputs.tf              # IP da VM, URL, comandos úteis pós-deploy
-    ├── terraform.tfvars.example  # template — copie para terraform.tfvars
-    ├── .gitignore              # protege tfvars, chaves e state local
+    ├── variables.tf            # declaration of all variables
+    ├── gce.tf                  # VM, static IP, firewall rules
+    ├── cloudflare.tf           # Tunnel, routing, DNS CNAME
+    ├── outputs.tf              # VM IP, URL, useful post-deploy commands
+    ├── terraform.tfvars.example  # template — copy to terraform.tfvars
+    ├── .gitignore              # protects tfvars, keys and local state
     ├── credentials/
-    │   └── README.md           # passo a passo para obter cada credencial
+    │   └── README.md           # step-by-step to obtain each credential
     └── scripts/
-        └── startup.sh          # script executado na VM na primeira inicialização
+        └── startup.sh          # script executed on the VM on first boot
 ```
 
 ---
 
-## O que o startup.sh faz
+## What startup.sh does
 
-Ao criar a VM, o GCE executa `startup.sh` automaticamente (uma única vez). Ele:
+When the VM is created, GCE runs `startup.sh` automatically (once). It:
 
-1. Instala Node.js 20 e pnpm
-2. Instala PostgreSQL 16 e cria o banco `paperclip`
-3. Cria o usuário de sistema `paperclip`
-4. Escreve `/home/paperclip/paperclip.env` com as variáveis de ambiente
-5. Cria e ativa o serviço systemd `paperclip` (ainda vai falhar — onboarding pendente)
-6. Instala o `cloudflared` e ativa o serviço systemd com o token do tunnel
+1. Installs Node.js 20 and pnpm
+2. Installs PostgreSQL 16 and creates the `paperclip` database
+3. Creates the `paperclip` system user
+4. Writes `/home/paperclip/paperclip.env` with environment variables
+5. Creates and enables the `paperclip` systemd service (will still fail — onboarding pending)
+6. Installs `cloudflared` and enables the systemd service with the tunnel token
 
-> **O onboarding do Paperclip não é feito automaticamente.** Ele requer input interativo no modo `authenticated/public` e deve ser feito manualmente após o boot. Ver seção "Onboarding manual correto" nas lições aprendidas.
+> **Paperclip onboarding is not done automatically.** It requires interactive input in `authenticated/public` mode and must be done manually after boot. See the "Correct manual onboarding" section in lessons learned.
 
-O log completo fica em `/var/log/paperclip-startup.log` na VM.
+The full log is at `/var/log/paperclip-startup.log` on the VM.
 
 ---
 
-## Deploy passo a passo
+## Step-by-step Deploy
 
-### 1. Autentique no GCP
+### 1. Authenticate with GCP
 
 ```bash
 gcloud auth application-default login
 gcloud config set project YOUR_GCP_PROJECT_ID
 ```
 
-### 2. Obtenha as credenciais CloudFlare
+### 2. Obtain CloudFlare credentials
 
-Siga `infra/credentials/README.md`. Você vai precisar de:
+Follow `infra/credentials/README.md`. You will need:
 
-- **API Token** — com permissões `Zone:DNS:Edit` + `Account:Cloudflare Tunnel:Edit`
-- **Zone ID** — nas configurações de `example.com` no dashboard
-- **Account ID** — visível na URL do dashboard CloudFlare
+- **API Token** — with `Zone:DNS:Edit` + `Account:Cloudflare Tunnel:Edit` permissions
+- **Zone ID** — in the `example.com` settings on the dashboard
+- **Account ID** — visible in the CloudFlare dashboard URL
 
-### 3. Configure as variáveis
+### 3. Configure variables
 
 ```bash
 cd infra
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Edite `terraform.tfvars` e preencha:
+Edit `terraform.tfvars` and fill in:
 
 ```hcl
 ssh_public_key        = "ssh-ed25519 AAAA..."   # cat ~/.ssh/id_ed25519.pub
@@ -121,16 +122,16 @@ cloudflare_zone_id    = "..."
 cloudflare_account_id = "..."
 ```
 
-### 4. Rode o OpenTofu
+### 4. Run OpenTofu
 
 ```bash
 cd infra
 tofu init
-tofu plan        # revise o que será criado
-tofu apply       # cria tudo (~2 min)
+tofu plan        # review what will be created
+tofu apply       # creates everything (~2 min)
 ```
 
-O output mostrará:
+The output will show:
 
 ```
 app_url                = "https://paperclip.example.com"
@@ -140,58 +141,58 @@ bootstrap_ceo_command  = "ssh ubuntu@34.x.x.x 'sudo -iu paperclip npx paperclipa
 startup_log_command    = "ssh ubuntu@34.x.x.x 'sudo tail -f /var/log/paperclip-startup.log'"
 ```
 
-### 5. Aguarde o startup (~5 minutos)
+### 5. Wait for startup (~5 minutes)
 
-Acompanhe o progresso:
+Follow the progress:
 
 ```bash
 ssh ubuntu@<IP> 'sudo tail -f /var/log/paperclip-startup.log'
 ```
 
-### 6. Crie o primeiro usuário (CEO)
+### 6. Create the first user (CEO)
 
 ```bash
 ssh ubuntu@<IP> 'sudo -iu paperclip npx paperclipai auth bootstrap-ceo'
 ```
 
-Acesse https://paperclip.example.com e faça login.
+Visit https://paperclip.example.com and log in.
 
 ---
 
-## Operações do dia a dia
+## Day-to-day Operations
 
-### SSH na VM
+### SSH into the VM
 
 ```bash
 ssh ubuntu@<vm_external_ip>
 ```
 
-### Ver logs da aplicação
+### View application logs
 
 ```bash
 sudo journalctl -u paperclip -f
 ```
 
-### Ver logs do tunnel
+### View tunnel logs
 
 ```bash
 sudo journalctl -u cloudflared -f
 ```
 
-### Reiniciar serviços
+### Restart services
 
 ```bash
 sudo systemctl restart paperclip
 sudo systemctl restart cloudflared
 ```
 
-### Status dos serviços
+### Service status
 
 ```bash
 sudo systemctl status paperclip cloudflared postgresql
 ```
 
-### Diagnóstico do Paperclip
+### Paperclip diagnostics
 
 ```bash
 sudo -iu paperclip npx paperclipai doctor
@@ -200,56 +201,56 @@ sudo -iu paperclip npx paperclipai env
 
 ---
 
-## Destruir a infra
+## Destroy the infrastructure
 
 ```bash
 cd infra
 tofu destroy
 ```
 
-> **Atenção:** isso remove a VM, o IP estático, o tunnel e o DNS. O banco de dados e todos os dados da aplicação serão perdidos.
+> **Warning:** this removes the VM, the static IP, the tunnel, and the DNS. The database and all application data will be lost.
 
 ---
 
-## Recursos criados no GCP
+## Resources created on GCP
 
-| Recurso | Nome | Custo estimado |
+| Resource | Name | Estimated Cost |
 |---|---|---|
-| Compute Instance | `paperclip-server` | ~$50/mês (e2-standard-2) |
-| Static IP | `paperclip-server-ip` | ~$3/mês |
-| Firewall rules | `paperclip-allow-ssh`, `paperclip-allow-icmp` | grátis |
+| Compute Instance | `paperclip-server` | ~$50/month (e2-standard-2) |
+| Static IP | `paperclip-server-ip` | ~$3/month |
+| Firewall rules | `paperclip-allow-ssh`, `paperclip-allow-icmp` | free |
 
-## Recursos criados no CloudFlare
+## Resources created on CloudFlare
 
-| Recurso | Detalhe |
+| Resource | Detail |
 |---|---|
 | Tunnel | `paperclip-gce` |
 | DNS Record | `paperclip.example.com` CNAME → tunnel |
 
-CloudFlare Tunnel é gratuito no plano Free.
+CloudFlare Tunnel is free on the Free plan.
 
 ---
 
-## Lições aprendidas (primeira instalação — 2026-05-06)
+## Lessons Learned (first install — 2026-05-06)
 
-Tudo que descobrimos na prática. Leia antes de fazer um novo deploy.
+Everything we discovered in practice. Read before doing a new deploy.
 
-### Erros que cometemos — não repita
+### Mistakes we made — don't repeat
 
-#### 1. Provider Cloudflare: recursos renomeados na v4
+#### 1. Cloudflare provider: resources renamed in v4
 
-Os recursos antigos foram deprecados e removidos. Sempre use os novos nomes:
+Old resources were deprecated and removed. Always use the new names:
 
-| Antigo (não usar) | Novo (correto) |
+| Old (don't use) | New (correct) |
 |---|---|
 | `cloudflare_tunnel` | `cloudflare_zero_trust_tunnel_cloudflared` |
 | `cloudflare_tunnel_config` | `cloudflare_zero_trust_tunnel_cloudflared_config` |
 
-Se esquecer, o `tofu plan` avisa com `Deprecated Resource` e o `tofu apply` pode falhar.
+If you forget, `tofu plan` warns with `Deprecated Resource` and `tofu apply` may fail.
 
-#### 2. `http_host_header_rewrite` não existe no bloco `origin_request`
+#### 2. `http_host_header_rewrite` does not exist in the `origin_request` block
 
-Argumento inválido que causa erro no `tofu plan`. O bloco correto é:
+Invalid argument that causes an error on `tofu plan`. The correct block is:
 
 ```hcl
 origin_request {
@@ -260,87 +261,87 @@ origin_request {
 }
 ```
 
-#### 3. Ao renomear recursos no Terraform/OpenTofu, atualize TODOS os arquivos que os referenciam
+#### 3. When renaming resources in Terraform/OpenTofu, update ALL files that reference them
 
-Quando renomeamos `cloudflare_tunnel` → `cloudflare_zero_trust_tunnel_cloudflared`, o `outputs.tf` ainda referenciava o nome antigo e causou erro no `tofu plan`. Buscar por `cloudflare_tunnel.` em todos os arquivos antes de aplicar.
+When we renamed `cloudflare_tunnel` → `cloudflare_zero_trust_tunnel_cloudflared`, `outputs.tf` still referenced the old name and caused an error on `tofu plan`. Search for `cloudflare_tunnel.` across all files before applying.
 
-#### 4. APIs do GCP precisam ser ativadas antes do primeiro `tofu apply`
+#### 4. GCP APIs must be enabled before the first `tofu apply`
 
-O `tofu apply` falha se as APIs não estiverem ativas. Ativar antes:
+`tofu apply` fails if the APIs are not active. Enable them first:
 
 ```bash
 gcloud services enable compute.googleapis.com --project YOUR_GCP_PROJECT_ID
 gcloud services enable iam.googleapis.com --project YOUR_GCP_PROJECT_ID
 ```
 
-#### 5. NUNCA usar `npx paperclipai onboard --yes` em deploy de servidor
+#### 5. NEVER use `npx paperclipai onboard --yes` for server deployments
 
-O flag `--yes` força o modo `local_trusted/private` e **ignora silenciosamente** todas as variáveis de ambiente de deployment (`PAPERCLIP_DEPLOYMENT_MODE`, `PAPERCLIP_DEPLOYMENT_EXPOSURE`, `PAPERCLIP_AUTH_PUBLIC_BASE_URL`). O servidor sobe com config errada e falha com:
+The `--yes` flag forces `local_trusted/private` mode and **silently ignores** all deployment environment variables (`PAPERCLIP_DEPLOYMENT_MODE`, `PAPERCLIP_DEPLOYMENT_EXPOSURE`, `PAPERCLIP_AUTH_PUBLIC_BASE_URL`). The server starts with wrong config and fails with:
 
 ```
 authenticated public exposure requires auth.baseUrlMode=explicit
 ```
 
-**Para servidor, sempre rodar sem `--yes` e responder o wizard interativamente**, escolhendo:
+**For servers, always run without `--yes` and answer the wizard interactively**, choosing:
 - Deployment mode: `authenticated`
 - Exposure: `public`
 - Base URL: `https://paperclip.example.com`
 
-#### 6. `sudo -iu paperclip` falha quando o diretório atual não é acessível ao usuário `paperclip`
+#### 6. `sudo -iu paperclip` fails when the current directory is not accessible to the `paperclip` user
 
-O erro `EACCES spawn sh /home/ubuntu` acontece porque o usuário `paperclip` não tem permissão de leitura em `/home/ubuntu`. Sempre incluir `cd /home/paperclip` no início do comando:
+The error `EACCES spawn sh /home/ubuntu` happens because the `paperclip` user doesn't have read permission on `/home/ubuntu`. Always include `cd /home/paperclip` at the start of the command:
 
 ```bash
-# Errado
+# Wrong
 sudo -u paperclip bash -c 'npx paperclipai ...'
 
-# Correto
+# Correct
 sudo -u paperclip bash -c 'cd /home/paperclip && npx paperclipai ...'
 ```
 
-#### 7. O startup.sh não captura bem o output do onboarding interativo
+#### 7. startup.sh does not properly capture interactive onboarding output
 
-O onboarding precisou ser feito manualmente na VM após o primeiro boot. O `startup.sh` atual instala tudo mas não completa o onboarding corretamente porque o wizard requer input interativo para deploy em modo `authenticated`. Em deploys futuros, o fluxo correto é:
+Onboarding had to be done manually on the VM after the first boot. The current `startup.sh` installs everything but doesn't complete onboarding correctly because the wizard requires interactive input for `authenticated` mode deployment. For future deploys, the correct flow is:
 
-1. `tofu apply` → VM sobe, instala Node.js, PostgreSQL, cloudflared
-2. SSH na VM → rodar onboarding manualmente (ver seção abaixo)
-3. Criar usuário CEO
-4. Subir o serviço
-
----
-
-### O que funcionou bem
-
-- **Cloudflare Tunnel** elimina a necessidade de Nginx, Certbot e Let's Encrypt. Certificado TLS gerenciado automaticamente pelo CloudFlare.
-- **PostgreSQL local** na VM funciona perfeitamente. Backup automático a cada 60 minutos está habilitado pelo próprio Paperclip em `/home/paperclip/.paperclip/instances/default/data/backups`.
-- **Token do tunnel via GCE metadata** funciona corretamente — o `startup.sh` lê com `curl -H "Metadata-Flavor: Google"`.
-- **Chave SSH existente** (`~/.ssh/github`) funciona normalmente com `ssh -i ~/.ssh/github ubuntu@<IP>`.
-- **75 migrations do banco** aplicadas automaticamente pelo Paperclip na primeira execução do onboard. Se precisar re-rodar o onboard, as migrations já aplicadas são detectadas e puladas.
+1. `tofu apply` → VM boots, installs Node.js, PostgreSQL, cloudflared
+2. SSH into VM → run onboarding manually (see section below)
+3. Create CEO user
+4. Start the service
 
 ---
 
-### Onboarding manual correto (para usar em novos deploys)
+### What worked well
+
+- **Cloudflare Tunnel** eliminates the need for Nginx, Certbot and Let's Encrypt. TLS certificate automatically managed by CloudFlare.
+- **Local PostgreSQL** on the VM works perfectly. Automatic backup every 60 minutes is enabled by Paperclip itself at `/home/paperclip/.paperclip/instances/default/data/backups`.
+- **Tunnel token via GCE metadata** works correctly — `startup.sh` reads it with `curl -H "Metadata-Flavor: Google"`.
+- **Existing SSH key** (`~/.ssh/github`) works normally with `ssh -i ~/.ssh/github ubuntu@<IP>`.
+- **75 database migrations** applied automatically by Paperclip on the first onboard run. If you need to re-run onboard, already applied migrations are detected and skipped.
+
+---
+
+### Correct manual onboarding (for use in new deploys)
 
 ```bash
-# 1. Para o serviço se estiver rodando
+# 1. Stop the service if it's running
 sudo systemctl stop paperclip
 
-# 2. Remove config antiga se existir (mantém master.key e .env)
+# 2. Remove old config if it exists (keeps master.key and .env)
 sudo rm -f /home/paperclip/.paperclip/instances/default/config.json
 
-# 3. Onboarding interativo como usuário paperclip
+# 3. Interactive onboarding as the paperclip user
 sudo -u paperclip bash -c '
   cd /home/paperclip
   set -a; source /home/paperclip/paperclip.env; set +a
   npx paperclipai onboard
 '
-# No wizard: authenticated / public / https://paperclip.example.com
+# In the wizard: authenticated / public / https://paperclip.example.com
 
-# 4. Sobe o serviço
+# 4. Start the service
 sudo systemctl start paperclip
 sudo journalctl -u paperclip -f
 
-# 5. Cria o primeiro usuário (CEO)
+# 5. Create the first user (CEO)
 sudo -u paperclip bash -c '
   cd /home/paperclip
   set -a; source /home/paperclip/paperclip.env; set +a
